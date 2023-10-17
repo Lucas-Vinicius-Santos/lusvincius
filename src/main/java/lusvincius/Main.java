@@ -7,6 +7,8 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.lang.management.ManagementFactory;
+import java.lang.management.RuntimeMXBean;
 
 public class Main {
 
@@ -23,9 +25,10 @@ public class Main {
   }
 
   public static void main(String[] args) {
-	final String PATH_ORIGEM = "C:\\Users\\lucasvinicius\\Pictures\\lusvincius\\";
-	final String PATH_DESTINO = "C:\\Users\\lucasvinicius\\Documents\\";
-	final String IMG = "dragonslayer.png";
+	final String PATH_ORIGEM = "C:\\Users\\55859\\Pictures\\lusvincius\\";
+	final String PATH_DESTINO = "C:\\Users\\55859\\Documents\\";
+	final String IMG = "testelusvincius212.jpg";
+//	final String IMG = "testelusvincius106.jpg";
 
 	BufferedImage img = carregarImagem(PATH_ORIGEM, IMG);
 	Color[][] colors = corController.gerarMatrizCoresImg(img, img.getWidth(), img.getHeight());
