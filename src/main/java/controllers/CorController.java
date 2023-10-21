@@ -1,12 +1,10 @@
 package controllers;
 
-import java.awt.Color;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 
 public class CorController {
 
-  
-  
   public Color[][] gerarMatrizCoresImg(BufferedImage imagem, int width, int height) {
 	Color[][] result = new Color[height][width];
 

@@ -1,7 +1,8 @@
 package controllers;
 
-import org.apache.commons.math3.util.Pair;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.streaming.SXSSFSheet;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -9,8 +10,8 @@ import org.apache.poi.xssf.usermodel.extensions.XSSFCellBorder.BorderSide;
 import util.Arquivos;
 
 import java.awt.Color;
+import java.util.List;
 import java.util.*;
-import java.util.concurrent.*;
 
 public class XLSController {
 
@@ -19,14 +20,18 @@ public class XLSController {
     final int XLS_CELL_WIDTH = XLS_CELL_HEIGHT / 5;
 
     private final Workbook workbook;
-    private final Sheet folha;
+    private final SXSSFSheet folha;
     private XSSFCellStyle cellStyle;
-    private Map<Color, XSSFCellStyle> estiloCelulaCache = new HashMap<>();
+    private Map<Integer, XSSFCellStyle> estiloCelulaCache = new HashMap<>();
 
     public XLSController() {
-        this.workbook = new XSSFWorkbook();
-        this.folha = workbook.createSheet(NOME_PLANILHA);
+        this.workbook = new SXSSFWorkbook(new XSSFWorkbook(), 1000, true);
+        this.workbook.createSheet(NOME_PLANILHA);
+        this.workbook.setSheetName(0, NOME_PLANILHA);
+        this.folha = (SXSSFSheet) workbook.getSheetAt(0);
+        this.folha.setRandomAccessWindowSize(100);
         this.cellStyle = (XSSFCellStyle) workbook.createCellStyle();
+        this.cellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
     }
 
     public void gerarPlanilha(Color[][] colors, int qtdLinhas, int qtdColunas, String destino, boolean utilizarBordas) {
@@ -34,8 +39,9 @@ public class XLSController {
             this.estilizarBordas();
         }
 
-        XSSFCellStyle[][] matrizEstiloCelulas = gerarMatrizEstiloCelulas(qtdLinhas, qtdColunas, colors);
-        System.out.println(new Date().toString().concat(" - Estilos criados"));
+        List<XSSFCellStyle> listaEstiloCelulas = gerarListaEstiloCelulas(qtdLinhas, qtdColunas, colors);
+
+        System.out.print(new Date()); System.out.println(" ==Montando planilha==");
 
         for (int row = 0; row < qtdLinhas; row++) {
             Row linha = folha.createRow(row);
@@ -43,15 +49,12 @@ public class XLSController {
             folha.setColumnWidth(row, XLS_CELL_WIDTH * 256);
 
             for (int col = 0; col < qtdColunas; col++) {
-                linha.createCell(col).setCellStyle(matrizEstiloCelulas[row][col]);
+                linha.createCell(col).setCellStyle(listaEstiloCelulas.remove(0));
             }
-
-            logProgressoCriacaoTabela(qtdLinhas, qtdColunas, row, "Celulas");
         }
-        logProgressoCriacaoTabela(qtdLinhas, qtdColunas, qtdLinhas, "Celulas");
 
         Arquivos.gerarXLS(workbook, destino, NOME_PLANILHA.concat(".xlsx"));
-        System.out.println("==Planilha criada com sucesso==");
+        System.out.print(new Date()); System.out.println(" ==Planilha criada com sucesso==");
     }
 
     public void estilizarBordas() {
@@ -68,81 +71,49 @@ public class XLSController {
         this.cellStyle.setBorderColor(BorderSide.RIGHT, borderColor);
     }
 
-    public XSSFCellStyle estiloCelula(Color cor) {
-        if (estiloCelulaCache.containsKey(cor)) {
-            return estiloCelulaCache.get(cor);
-        } else {
-            XSSFCellStyle novoEstilo = (XSSFCellStyle) this.cellStyle.clone();
-            novoEstilo.setFillForegroundColor(new XSSFColor(new java.awt.Color(cor.getRed(), cor.getGreen(), cor.getBlue())));
-            novoEstilo.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-            estiloCelulaCache.put(cor, novoEstilo);
-            return novoEstilo;
-        }
-    }
-
-    private static void logProgressoCriacaoTabela(int qtdLinhas, int qtdColunas, int row, String label) {
+    private static void logProgressoCriacaoTabela(int tamanhoTotal, int index, String label) {
         System.out.print(new Date().toString().concat(" === "));
-        System.out.print((row * qtdColunas) * 100 / (qtdLinhas * qtdColunas));
-        System.out.println("% - ".concat(String.valueOf(row)).concat(" ").concat(label));
+        System.out.print(index * 100 / tamanhoTotal);
+        System.out.println("% - ".concat(String.valueOf(index)).concat(" ").concat(label));
     }
 
-    private XSSFCellStyle[][] gerarMatrizEstiloCelulas(int qtdLinhas, int qtdColunas, Color[][] colors) {
-        XSSFCellStyle[][] matrizEstilo = new XSSFCellStyle[qtdLinhas][qtdColunas];
-
-        Map<Pair<Integer, Integer>, Color> mapaCores = new HashMap<>();
-        for (int row = 0; row < qtdLinhas; row++) {
-            for (int col = 0; col < qtdColunas; col++) {
-                mapaCores.put(new Pair<>(row, col), colors[row][col]);
+    private List<XSSFCellStyle> gerarListaEstiloCelulas(int qtdLinhas, int qtdColunas, Color[][] colors) {
+        List<XSSFCellStyle> listaEstiloCelulas = new ArrayList<>();
+        List<Color> listaCoresInvertida = new ArrayList<>();
+        for (int row = qtdLinhas-1; row >= 0; row--) {
+            for (int col = qtdColunas-1; col >= 0; col--) {
+                listaCoresInvertida.add(colors[row][col]);
             }
-            logProgressoCriacaoTabela(qtdLinhas, qtdColunas, row, "Mapa");
         }
 
+        for (int index = 0; index < qtdLinhas * qtdColunas; index++) {
+            Color cor = listaCoresInvertida.remove(listaCoresInvertida.size() -1);
+            listaEstiloCelulas.add(getEstilo(cor));
 
-        for (int row = 0; row < qtdLinhas; row++) {
-            for (int col = 0; col < qtdColunas; col++) {
-                matrizEstilo[row][col] = estiloCelula(mapaCores.get(new Pair<>(row, col)));
+            if (index % 10 == 0) {
+                logProgressoCriacaoTabela(qtdLinhas * qtdColunas, index, "Células estilizadas");
             }
-            logProgressoCriacaoTabela(qtdLinhas, qtdColunas, row, "Estilo");
         }
+        logProgressoCriacaoTabela(qtdLinhas * qtdColunas, qtdLinhas * qtdColunas, "Células estilizadas");
 
-        return matrizEstilo;
+        return listaEstiloCelulas;
     }
 
-    private XSSFCellStyle[][] gerarMatrizEstiloCelulasThreads(int qtdLinhas, int qtdColunas, Color[][] colors) {
-        XSSFCellStyle[][] matrizEstilo = new XSSFCellStyle[qtdLinhas][qtdColunas];
-        ExecutorService executorService = null;
+    private XSSFCellStyle getEstilo(Color cor) {
+        XSSFCellStyle novoEstilo;
+        int arredondar = 8;
+        cor = new Color(Math.round(cor.getRed() / arredondar)*arredondar,
+                Math.round(cor.getGreen() / arredondar)*arredondar,
+                Math.round(cor.getBlue() / arredondar)*arredondar);
 
-        try {
-            System.out.println(new Date().toString().concat(" - MultiThreads"));
-            executorService = Executors.newFixedThreadPool(2);
-            executorService.execute(() -> {
-                for (int row = 0; row < qtdLinhas / 2; row++) {
-                    for (int col = 0; col < qtdColunas; col++) {
-                        matrizEstilo[row][col] = estiloCelula(colors[row][col]);
-                    }
-                    logProgressoCriacaoTabela(qtdLinhas, qtdColunas, row, "Estilo (1)");
-                }
-            });
 
-            executorService.execute(() -> {
-                for (int row = qtdLinhas / 2; row < qtdLinhas; row++) {
-                    for (int col = 0; col < qtdColunas; col++) {
-                        matrizEstilo[row][col] = estiloCelula(colors[row][col]);
-                    }
-                    logProgressoCriacaoTabela(qtdLinhas, qtdColunas, row, "Estilo (2)");
-                }
-            });
-
-            executorService.shutdown();
-            executorService.awaitTermination(5, TimeUnit.MINUTES);
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (executorService != null) {
-                executorService.shutdown();
-            }
+        if (estiloCelulaCache.containsKey(cor.getRGB())) {
+            novoEstilo = estiloCelulaCache.get(cor.getRGB());
+        } else {
+            novoEstilo = (XSSFCellStyle) this.cellStyle.clone();
+            novoEstilo.setFillForegroundColor(new XSSFColor(new Color(cor.getRed(), cor.getGreen(), cor.getBlue())));
+            estiloCelulaCache.put(cor.getRGB(), novoEstilo);
         }
-
-        return matrizEstilo;
+        return novoEstilo;
     }
 }
