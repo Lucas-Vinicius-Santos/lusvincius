@@ -1,6 +1,9 @@
 package controllers;
 
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.streaming.SXSSFSheet;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
@@ -8,21 +11,21 @@ import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xssf.usermodel.extensions.XSSFCellBorder.BorderSide;
 import util.Arquivos;
+import util.Logger;
 
-import java.awt.Color;
+import java.awt.*;
+import java.io.File;
 import java.util.List;
 import java.util.*;
 
 public class XLSController {
 
-    final String NOME_PLANILHA = "lusvincius";
-    final int XLS_CELL_HEIGHT = 10;
-    final int XLS_CELL_WIDTH = XLS_CELL_HEIGHT / 5;
+    private final String NOME_PLANILHA = "lusvincius";
 
     private final Workbook workbook;
     private final SXSSFSheet folha;
-    private XSSFCellStyle cellStyle;
-    private Map<Integer, XSSFCellStyle> estiloCelulaCache = new HashMap<>();
+    private final XSSFCellStyle cellStyle;
+    private final Map<Integer, XSSFCellStyle> estiloCelulaCache = new HashMap<>();
 
     public XLSController() {
         this.workbook = new SXSSFWorkbook(new XSSFWorkbook(), 1000, true);
@@ -34,27 +37,20 @@ public class XLSController {
         this.cellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
     }
 
-    public void gerarPlanilha(Color[][] colors, int qtdLinhas, int qtdColunas, String destino, boolean utilizarBordas) {
-        if (utilizarBordas) {
-            this.estilizarBordas();
-        }
+    public File gerarPlanilha(Color[][] colors, int qtdLinhas, int qtdColunas, String destino, String nomeImagem, boolean utilizarBordas) {
+        List<Color> listaInvertidaCores;
+        List<XSSFCellStyle> listaEstiloCelulas;
 
-        List<XSSFCellStyle> listaEstiloCelulas = gerarListaEstiloCelulas(qtdLinhas, qtdColunas, colors);
+        if (utilizarBordas) this.estilizarBordas();
 
-        System.out.print(new Date()); System.out.println(" ==Montando planilha==");
+        listaInvertidaCores = converterMatrizEmListaInvertidaCores(qtdLinhas, qtdColunas, colors);
+        listaEstiloCelulas = gerarListaEstilosCelulas(qtdLinhas, qtdColunas, listaInvertidaCores);
 
-        for (int row = 0; row < qtdLinhas; row++) {
-            Row linha = folha.createRow(row);
-            linha.setHeightInPoints(XLS_CELL_HEIGHT);
-            folha.setColumnWidth(row, XLS_CELL_WIDTH * 256);
+        montarPlanilha(qtdLinhas, qtdColunas, listaEstiloCelulas);
 
-            for (int col = 0; col < qtdColunas; col++) {
-                linha.createCell(col).setCellStyle(listaEstiloCelulas.remove(0));
-            }
-        }
-
-        Arquivos.gerarXLS(workbook, destino, NOME_PLANILHA.concat(".xlsx"));
-        System.out.print(new Date()); System.out.println(" ==Planilha criada com sucesso==");
+        File planilha = Arquivos.gerarXLS(workbook, destino, nomeImagem.concat(".xlsx"));
+        Logger.texto("Planilha criada com sucesso");
+        return planilha;
     }
 
     public void estilizarBordas() {
@@ -71,41 +67,34 @@ public class XLSController {
         this.cellStyle.setBorderColor(BorderSide.RIGHT, borderColor);
     }
 
-    private static void logProgressoCriacaoTabela(int tamanhoTotal, int index, String label) {
-        System.out.print(new Date().toString().concat(" === "));
-        System.out.print(index * 100 / tamanhoTotal);
-        System.out.println("% - ".concat(String.valueOf(index)).concat(" ").concat(label));
-    }
-
-    private List<XSSFCellStyle> gerarListaEstiloCelulas(int qtdLinhas, int qtdColunas, Color[][] colors) {
-        List<XSSFCellStyle> listaEstiloCelulas = new ArrayList<>();
+    private static List<Color> converterMatrizEmListaInvertidaCores(int qtdLinhas, int qtdColunas, Color[][] colors) {
         List<Color> listaCoresInvertida = new ArrayList<>();
-        for (int row = qtdLinhas-1; row >= 0; row--) {
-            for (int col = qtdColunas-1; col >= 0; col--) {
+        for (int row = qtdLinhas -1; row >= 0; row--) {
+            for (int col = qtdColunas -1; col >= 0; col--) {
                 listaCoresInvertida.add(colors[row][col]);
             }
         }
+        return listaCoresInvertida;
+    }
+
+    private List<XSSFCellStyle> gerarListaEstilosCelulas(int qtdLinhas, int qtdColunas, List<Color> listaCoresInvertida) {
+        List<XSSFCellStyle> estilosCelulas = new ArrayList<>();
 
         for (int index = 0; index < qtdLinhas * qtdColunas; index++) {
             Color cor = listaCoresInvertida.remove(listaCoresInvertida.size() -1);
-            listaEstiloCelulas.add(getEstilo(cor));
+            estilosCelulas.add(getEstilo(cor));
 
-            if (index % 10 == 0) {
-                logProgressoCriacaoTabela(qtdLinhas * qtdColunas, index, "Células estilizadas");
+            if (index % 100 == 0) {
+                Logger.progresso(qtdLinhas * qtdColunas, index, "Células estilizadas");
             }
         }
-        logProgressoCriacaoTabela(qtdLinhas * qtdColunas, qtdLinhas * qtdColunas, "Células estilizadas");
+        Logger.progresso(qtdLinhas * qtdColunas, qtdLinhas * qtdColunas, "Células estilizadas");
 
-        return listaEstiloCelulas;
+        return estilosCelulas;
     }
 
     private XSSFCellStyle getEstilo(Color cor) {
         XSSFCellStyle novoEstilo;
-        int arredondar = 8;
-        cor = new Color(Math.round(cor.getRed() / arredondar)*arredondar,
-                Math.round(cor.getGreen() / arredondar)*arredondar,
-                Math.round(cor.getBlue() / arredondar)*arredondar);
-
 
         if (estiloCelulaCache.containsKey(cor.getRGB())) {
             novoEstilo = estiloCelulaCache.get(cor.getRGB());
@@ -115,5 +104,20 @@ public class XLSController {
             estiloCelulaCache.put(cor.getRGB(), novoEstilo);
         }
         return novoEstilo;
+    }
+
+    private void montarPlanilha(int qtdLinhas, int qtdColunas, List<XSSFCellStyle> listaEstiloCelulas) {
+        int XLS_CELL_HEIGHT = 10, XLS_CELL_WIDTH = XLS_CELL_HEIGHT / 5;
+
+        Logger.texto("Montando planilha... ");
+        for (int row = 0; row < qtdLinhas; row++) {
+            Row linha = folha.createRow(row);
+            linha.setHeightInPoints(XLS_CELL_HEIGHT);
+
+            for (int col = 0; col < qtdColunas; col++) {
+                folha.setColumnWidth(col, XLS_CELL_WIDTH * 256);
+                linha.createCell(col).setCellStyle(listaEstiloCelulas.remove(0));
+            }
+        }
     }
 }
